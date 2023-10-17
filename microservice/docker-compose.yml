@@ -1,0 +1,103 @@
+version: '3'
+services:
+
+  db:
+    image: mongo:5.0.12
+    container_name: db
+    ports:
+     - "27017:27017"
+    restart: always
+  
+  worker:
+    image: worker
+    build: 
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: worker
+    ports:
+     - "5000:5000"
+    environment:
+     - PORT=5000
+     - DBHOST=mongodb://db:27017
+     - NODE_ENV=development
+    depends_on:
+     - db
+    volumes:
+      - ./worker:/app
+      - /app/node_modules
+    restart: always
+
+  exercise:
+    build: 
+      context: ./exercise
+      dockerfile: Dockerfile
+    image: exercise-image
+    container_name: exercises
+    ports:
+      - '5002:5002'
+      # - '4004:5002'
+      # - '4005:5002'
+      # - '4006:5002'
+      # - '4007:5002'
+    # environment:
+    #  - SERVICE_PORTS=4002
+    # deploy:
+    #  replicas: 5
+    #  update_config:
+    #    parallelism: 5
+    #    delay: 10s
+    #  restart_policy:
+    #    condition: on-failure
+    #    max_attempts: 3
+    #    window: 120s
+    volumes:
+      - ./exercise:/app
+      - /app/node_modules
+    depends_on:
+      - worker
+    # networks:
+    #  - web
+
+  user:
+    build:
+      context: ./user
+      dockerfile: Dockerfile
+    image: user-image
+    container_name: users
+    restart: on-failure
+    ports:
+      - '5001:5001'
+    volumes:
+      - ./user:/app
+      - /app/node_modules
+    depends_on:
+      - worker
+    # networks:
+    #  - web
+  
+  lb:
+    image: dockercloud/haproxy:latest
+    links:
+      - user
+      - exercise
+      - worker
+    depends_on:
+      - user
+      - exercise
+      - worker
+    environment:
+      - BALANCE=leastconn
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - '80:80'
+    restart: on-failure
+    # networks:
+    #  - web
+  
+# networks:
+#   web:
+#     driver: bridge 
+
+  # redis:
+  #   image: redis
